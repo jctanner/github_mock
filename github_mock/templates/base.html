@@ -1,0 +1,62 @@
+<!-- templates/base.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}My Flask App{% endblock %}</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <a class="navbar-brand" href="/">GitHub-Like</a>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav">
+                <li class="nav-item {% if request.path == '/ui' %}active{% endif %}">
+                    <a class="nav-link" href="/ui">Home</a>
+                </li>
+                <li class="nav-item {% if request.path == '/ui/repositories' %}active{% endif %}">
+                    <a class="nav-link" href="/ui/repositories">Repositories</a>
+                </li>
+                <li class="nav-item {% if request.path.startswith('/ui/users') %}active{% endif %}">
+                    <a class="nav-link" href="/ui/users">Users</a>
+                </li>
+
+                <li class="nav-item {% if request.path == '/ui/oauth-apps' %}active{% endif %}">
+                    <a class="nav-link" href="/ui/oauth-apps">Oauth Apps</a>
+                </li>
+
+            </ul>
+            <form class="form-inline ml-auto">
+                {% if session.username %}
+                <span class="navbar-text mr-3">Logged in as {{ session.username }}</span>
+                <a href="{{ url_for('ui_logout') }}" class="btn btn-outline-success my-2 my-sm-0">Log Out</a>
+                {% else %}
+                <a href="{{ url_for('ui_login') }}" class="btn btn-outline-success my-2 my-sm-0">Log In</a>
+                {% endif %}
+            </form>
+        </div>
+    </nav>
+
+    <div class="container mt-5">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.0.6/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.0.0/crypto-js.min.js"></script>
+
+</body>
+</html>
+

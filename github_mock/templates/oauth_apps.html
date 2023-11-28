@@ -1,0 +1,180 @@
+<!-- templates/repositories.html -->
+{% extends 'base.html' %}
+
+{% block title %}Oauth Apps{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Oauth Apps</h1>
+    <button type="button" class="btn btn-success mb-3" data-toggle="modal" data-target="#addOauthAppModal">Add</button>
+</div>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Login</th>
+            <th>Homepage</th>
+            <th>Callback</th>
+            <th>ClientID</th>
+            <th>SecretID</th>
+            <th>Controls</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for oapp in oauth_apps %}
+        <tr>
+            <td>{{ oapp.id }}</td>
+            <td>{{ oapp.name }}</td>
+            <td>{{ oapp.login }}</td>
+            <td>{{ oapp.homepage }}</td>
+            <td>{{ oapp.callback }}</td>
+            <td>{{ oapp.clientid }}</td>
+            <td>{{ oapp.secretid }}</td>
+            <td>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="modal fade" id="addOauthAppModal" tabindex="-1" role="dialog" aria-labelledby="addOauthAppModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addOauthAppModalLabel">Add</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="addOauthAppForm">
+                <div class="modal-body">
+                    <!-- Form fields for adding a user -->
+
+                    <div class="form-group">
+                        <label for="newAppLogin">Login</label>
+                        <!--<input type="text" class="form-control" id="newAppLogin" name="login" required>-->
+                        <select id="newAppLogin" name="login">
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newAppName">Name</label>
+                        <input type="text" class="form-control" id="newAppName" name="name" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newAppHomepage">Homepage</label>
+                        <input type="text" class="form-control" id="newAppHomepage" name="homepage" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newAppCallback">Callback</label>
+                        <input type="text" class="form-control" id="newAppCallback" name="callback" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newAppClientID">ClientID</label>
+                        <input type="text" class="form-control" id="newAppClientID" name="clientid" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newAppSecretID">SecretID</label>
+                        <input type="text" class="form-control" id="newAppSecretID" name="secretid" required>
+                    </div>
+
+
+                    <!-- Add other fields as necessary -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function generateRandomClientId(length = 20) {
+    const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let clientId = '';
+    for (let i = 0; i < length; i++) {
+        clientId += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return clientId;
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    $('#addOauthAppModal').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget); // Button that triggered the modal
+        var modal = $(this);
+
+        console.log('modal', modal);
+
+        modal.find('#newAppName').val('test app');
+        modal.find('#newAppHomepage').val('http://localhost:8002');
+        modal.find('#newAppCallback').val('http://localhost:8002/complete/github/');
+
+        const clientid = generateRandomClientId();
+        console.log('clientid', clientid);
+        modal.find('#newAppClientID').val(clientid);
+
+        const secretid = CryptoJS.SHA1(clientid).toString();
+		modal.find('#newAppSecretID').val(secretid);
+
+		const userSelect = document.getElementById('newAppLogin');
+
+        axios.get('/admin/users/list', )
+        .then(function (response) {
+            console.log(response);
+            const users = response.data;
+            users.forEach(function(user) {
+                const option = document.createElement('option');
+                option.value = user.login;
+                option.textContent = user.login;
+                userSelect.appendChild(option);
+            });
+        })
+        .catch(function (error) {
+            console.error(error);
+        });
+
+    });
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var addUserForm = document.getElementById('addOauthAppForm');
+
+    addUserForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        var formData = new FormData(addUserForm);
+        var object = {};
+        formData.forEach((value, key) => object[key] = value);
+        var json = JSON.stringify(object);
+
+        axios.post('/ui/oauth-apps', json, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(function (response) {
+            console.log(response);
+            // Handle success, e.g., close modal, refresh user list
+            $('#addOauthAppModal').modal('hide');
+        })
+        .catch(function (error) {
+            console.error(error);
+            // Handle error, e.g., show error message
+        });
+    });
+});
+</script>
+
+{% endblock %}
+

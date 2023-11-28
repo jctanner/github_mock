@@ -1,0 +1,244 @@
+<!-- templates/repositories.html -->
+{% extends 'base.html' %}
+
+{% block title %}Users{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Users</h1>
+    <button type="button" class="btn btn-success mb-3" data-toggle="modal" data-target="#addUserModal">Add User</button>
+</div>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Login</th>
+            <th>Email</th>
+            <th>Password</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for guser in users %}
+        <tr>
+            <td>{{ guser.id }}</td>
+            <td>{{ guser.login }}</td>
+            <td>{{ guser.email }}</td>
+            <td>{{ guser.password }}</td>
+            <td>
+                <!--<a href="{{ url_for('ui_user_edit', id=guser.id) }}" class="btn btn-primary btn-sm">Edit</a>-->
+                <!--<a href="#" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#editUserModal" data-user="{{ guser | tojson | safe }}">Edit</a>-->
+                <a href="#" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#editUserModal" data-user-id="{{ guser.id }}">Edit</a>
+                <a href="{{ url_for('ui_user_delete', id=guser.id) }}" class="btn btn-danger btn-sm">Delete</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Modal Template -->
+<div class="modal fade" id="editUserModal" tabindex="-1" role="dialog" aria-labelledby="editUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editUserModalLabel">Edit User</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="editUserForm">
+                <div class="modal-body">
+                    <!-- Form fields -->
+                    <input type="hidden" id="originalID" name="originalID">
+
+                    <div class="form-group">
+                        <label for="editUserID">ID</label>
+                        <input type="text" class="form-control" id="editUserID" name="id" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editUserLogin">Login</label>
+                        <input type="text" class="form-control" id="editUserLogin" name="login" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editUserEmail">Email</label>
+                        <input type="email" class="form-control" id="editUserEmail" name="email" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editUserPassword">Password</label>
+                        <input type="text" class="form-control" id="editUserPassword" name="password" required>
+                    </div>
+
+                    <!-- Add other fields as necessary -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addUserModal" tabindex="-1" role="dialog" aria-labelledby="addUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addUserModalLabel">Add User</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="addUserForm">
+                <div class="modal-body">
+                    <!-- Form fields for adding a user -->
+                    <div class="form-group">
+                        <label for="newUserLogin">Login</label>
+                        <input type="text" class="form-control" id="newUserLogin" name="login" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newUserPassword">Password</label>
+                        <input type="text" class="form-control" id="newUserPassword" name="password" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newUserEmail">Email</label>
+                        <input type="email" class="form-control" id="newUserEmail" name="email" required>
+                    </div>
+                    <!-- Add other fields as necessary -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Add User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    $('#editUserModal').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget); // Button that triggered the modal
+        //var userData = button.data('user'); // Extract user data from data-* attributes
+        //var userData = JSON.parse(button.attr('data-user'));
+        //console.log('userData', button, userData);
+
+        var userId = button.data('user-id');
+        console.log('userId', userId);
+
+        /*
+        // Update the modal's content.
+        var modal = $(this);
+        modal.find('.modal-title').text('Edit User ' + userData.login);
+        modal.find('#editUserId').val(userData.id);
+        modal.find('#editUserLogin').val(userData.login);
+        modal.find('#editUserEmail').val(userData.email);
+        modal.find('#editUserPassword').val(userData.password);
+        // Populate other fields as necessary
+        */
+
+        var modal = $(this);
+
+        // /admin/users/byid/<int:userid>
+        const url = `/admin/users/byid/${userId}`;
+        axios.get(url)
+            .then(function (response) {
+                console.log(response.data);
+
+                const userData = response.data;
+                console.log('userData', userData);
+
+                //var modal = $(this);
+                console.log('modal', modal);
+                modal.find('.modal-title').text('Edit User ' + userData.login);
+                modal.find('#originalID').val(userData.id);
+                modal.find('#editUserID').val(userData.id);
+                modal.find('#editUserLogin').val(userData.login);
+                modal.find('#editUserEmail').val(userData.email);
+                modal.find('#editUserPassword').val(userData.password);
+
+                console.log('done');
+
+            })
+            .catch(function (error) {
+                console.error(error);
+            });
+
+    });
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var editForm = document.getElementById('editUserForm');
+
+    editForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        var userId = document.getElementById('originalID').value;
+        var formData = new FormData(editForm);
+		console.log('formData', formData);
+
+        var object = {};
+        formData.forEach((value, key) => object[key] = value);
+        //object.id = formData['originalID'];
+        var json = JSON.stringify(object);
+		console.log('json', json);
+
+        axios.post('/ui/users/' + userId + '/edit', json, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(function (response) {
+            console.log(response);
+            // Handle success, e.g., close modal, refresh data on page
+            $('#editUserModal').modal('hide');
+        })
+        .catch(function (error) {
+            console.error(error);
+            // Handle error, e.g., show error message
+        });
+    });
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var addUserForm = document.getElementById('addUserForm');
+
+    addUserForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        var formData = new FormData(addUserForm);
+        var object = {};
+        formData.forEach((value, key) => object[key] = value);
+        var json = JSON.stringify(object);
+
+        axios.post('/ui/users', json, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(function (response) {
+            console.log(response);
+            // Handle success, e.g., close modal, refresh user list
+            $('#addUserModal').modal('hide');
+        })
+        .catch(function (error) {
+            console.error(error);
+            // Handle error, e.g., show error message
+        });
+    });
+});
+</script>
+
+{% endblock %}
+
