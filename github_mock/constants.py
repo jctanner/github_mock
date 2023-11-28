@@ -24,7 +24,7 @@ from flask import redirect
 
 
 # for mutable users
-DB_NAME = 'user_database.db'
+DB_NAME = os.environ.get('DB_NAME', 'user_database.db')
 
 # When run inside a container, we need to know how to talk to the galaxy api
 UPSTREAM_PROTO = os.environ.get('UPSTREAM_PROTO')

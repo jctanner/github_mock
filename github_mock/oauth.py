@@ -89,6 +89,7 @@ def do_authorization():
     try:
         this_session = get_session_by_id(_gh_sess)
     except Exception as e:
+        print('failed getting session')
         print(e)
         sessionid = str(uuid.uuid4())
         login = session.get('login')
