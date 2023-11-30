@@ -25,6 +25,7 @@ from .constants import UPSTREAM
 from .constants import API_SERVER
 from .constants import CLIENT_API_SERVER
 from .constants import USERS
+from .constants import OAUTH_APPS
 
 
 def create_tables():
@@ -86,6 +87,17 @@ def create_tables():
         )
     ''')
     conn.commit()
+
+    for oapp in OAUTH_APPS:
+        sql = 'INSERT OR IGNORE INTO oauth_apps'
+        sql += ' (name, uid, homepage, callback, clientid, secretid)'
+        sql += ' VALUES(?, ?, ?, ?, ?, ?)'
+        print(sql)
+        cursor.execute(
+            sql,
+            (oapp['name'], oapp['uid'], oapp['homepage'], oapp['callback'], oapp['clientid'], oapp['secretid'],)
+        )
+        conn.commit()
 
     conn.close()
 
@@ -288,6 +300,12 @@ def get_oauth_app_list():
     conn.close()
 
     return apps
+
+
+def get_oauth_app_by_client_id(client_id):
+    oauth_apps = get_oauth_app_list()
+    oapps = [x for x in oauth_apps if x['clientid'] == client_id]
+    return oapps[0]
 
 
 def check_username_and_password(username, password):

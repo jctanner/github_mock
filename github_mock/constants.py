@@ -70,3 +70,14 @@ USERS = {
         'email': 'geerlingguy@nohaxx.me',
     }
 }
+
+OAUTH_APPS = [
+    {
+        'name': 'galaxy-local',
+        'uid': 1000,
+        'homepage': 'http://localhost:8002',
+        'callback': 'http://localhost:8002/complete/github/',
+        'clientid': 'Xabcd1234CLIENT',
+        'secretid': 'Xabcd1234SECRET',
+    }
+]

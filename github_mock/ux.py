@@ -42,6 +42,7 @@ def ui_login():
         if check_username_and_password(username, password):
             print('login success, redirect to root')
 
+            '''
             #sid = make_session(username)
             #print(f'sid {sid}')
             session['username'] = username
@@ -61,12 +62,31 @@ def ui_login():
             resp = make_response(redirect(url_for('root')))
             resp.set_cookie('_gh_sess', 'some_cookie_value')
             return resp
+            '''
+
+            # make a new valid session for the user ...
+            session['username'] = username
+            new_session_id = make_session(username)
+
+            # the oauth sequence wants them to return back to the app auth page ...
+            if request.args.get('return_to'):
+                return_to = request.args.get('return_to')
+                resp = make_response(redirect(return_to))
+            else:
+                resp = make_response(redirect(url_for('root')))
+
+            resp.set_cookie('_gh_sess', new_session_id)
+            resp.set_cookie('_user_session', new_session_id)
+            resp.set_cookie('dotcom_user', username)
+            resp.set_cookie('logged_in', 'yes')
+
+            return resp
 
         else:
             print('flashing')
             flash('Invalid credentials')
 
-    return render_template('login.html')
+    return render_template('login.html', url_params=request.args)
 
 
 @app.route('/ui/logout')

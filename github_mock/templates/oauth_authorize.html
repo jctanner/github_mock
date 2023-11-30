@@ -1,0 +1,59 @@
+<!-- templates/login.html -->
+{% extends 'base.html' %}
+
+{% block title %}App Authorization{% endblock %}
+
+{% block content %}
+
+<h1>App Authorization</h1>
+
+<div style="max-width: 40%; background-color: #f2f2f2; margin: auto; padding: 20px; border: 1px solid #ddd;">
+
+    <div><strong>{{ app_name }}</strong> by {{app_owner}}</div>
+    <div>wants to access your {{ username }} account.</div>
+
+    <br>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+    <button onclick="doCancel()">Cancel</button>
+    <button onclick="doAuthorization()">Authorize {{ app_owner }}</button>
+    </div>
+
+    <p>
+    <div>
+    Authorizing will redirect to
+    </div>
+    <div>
+    {{ redirect_url }}
+    </div>
+    </p>
+</div>
+
+<script>
+function doCancel() {
+    window.location.href = '{{ redirect_url }}';
+}
+
+function doAuthorization() {
+    const payload = {
+        authorize: 1,
+        authenticity_token: null,
+        redirect_uri_specified: true,
+        client_id: '{{ client_id }}',
+        redirect_uri: '{{ redirect_url }}',
+        state: null,
+        scope: null,
+        org_policy: 1,
+    }
+
+    const callback_url = '{{ callback }}';
+
+    // POST to <GH>/login/oauth/authorize
+    axios.post('/login/oauth/authorize', payload, {withCredentials: true})
+        .then(response => console.log(response))
+        .catch(error => console.log(error)) 
+}
+</script>
+
+{% endblock %}
+

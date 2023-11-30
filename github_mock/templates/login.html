@@ -6,7 +6,9 @@
 {% block content %}
 <h1>Login</h1>
 <!--<form method="post" action="{{ url_for('ui_login') }}">-->
-<form method="post" action="/session">
+<form method="post" action="{{ url_for('ui_login') }}?{{ url_params.to_dict()|urlencode }}">
+<!--<form method="post" action="/session">-->
+<!--<form method="post" action="{{ url_for('do_session') }}?{{ url_params.to_dict()|urlencode }}">-->
     <div class="form-group">
         <label for="username">Username:</label>
         <input type="text" class="form-control" id="username" name="username" required>
