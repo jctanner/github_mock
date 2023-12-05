@@ -5,10 +5,8 @@
 
 {% block content %}
 <h1>Login</h1>
-<!--<form method="post" action="{{ url_for('ui_login') }}">-->
-<form method="post" action="{{ url_for('ui_login') }}?{{ url_params.to_dict()|urlencode }}">
-<!--<form method="post" action="/session">-->
-<!--<form method="post" action="{{ url_for('do_session') }}?{{ url_params.to_dict()|urlencode }}">-->
+<!--<form method="post" action="{{ url_for('ui_login') }}?{{ url_params.to_dict()|urlencode }}">-->
+<form id="login-form" method="post" action="">
     <div class="form-group">
         <label for="username">Username:</label>
         <input type="text" class="form-control" id="username" name="username" required>
@@ -19,5 +17,56 @@
     </div>
     <button type="submit" class="btn btn-primary">Login</button>
 </form>
+
+<script>
+function parseQueryString(url) {
+  const parsedUrl = new URL(url);
+  const queryParams = new URLSearchParams(parsedUrl.search);
+  const params = {};
+
+  for (const [key, value] of queryParams.entries()) {
+    params[key] = value;
+  }
+
+  return params;
+}
+
+function encodeParams(urlParams) {
+	// Create an array to store the query parameters with encoded values
+	const encodedParams = [];
+
+	// Iterate over the query parameters and encode their values
+	//for (const [key, value] of urlParams.entries()) {
+	//  encodedParams.push(`${key}=${encodeURIComponent(value)}`);
+	//}
+
+	for (const key in urlParams) {
+		const value = urlParams[key];
+		encodedParams.push(`${key}=${encodeURIComponent(value)}`);
+	}
+
+	return encodedParams;
+}
+
+function dostuff() {
+    console.log('dostuff');
+    const currentUrl = window.location.href;
+    const queryParams = parseQueryString(currentUrl);
+    console.log(queryParams);
+
+	const encodedParams = encodeParams(queryParams);
+
+    const baseUrl = window.location.origin + window.location.pathname;
+    const postUrl = baseUrl + '?' + encodedParams.join('&')
+	console.log('postUrl', postUrl);
+
+    const form = document.getElementById('login-form');
+    form.setAttribute('action', postUrl);
+};
+
+window.onload = dostuff;
+
+</script>
+
 {% endblock %}
 

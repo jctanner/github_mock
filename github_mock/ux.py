@@ -66,6 +66,7 @@ def ui_login():
 
             # make a new valid session for the user ...
             session['username'] = username
+            session['login'] = username
             new_session_id = make_session(username)
 
             # the oauth sequence wants them to return back to the app auth page ...

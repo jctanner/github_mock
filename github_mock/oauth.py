@@ -10,6 +10,7 @@
 ###############################################################################
 
 
+import copy
 import os
 import uuid
 import random
@@ -77,6 +78,15 @@ from .database import get_oauth_app_by_client_id
 # Backend response sequence ...
 # /complete/github/?code=9257c509396232aa4f67 -> /accounts/profile
 
+# Enable CORS for all routes
+@app.after_request
+def enable_cors(response):
+	origin = request.headers.get('Origin')
+	response.headers['Access-Control-Allow-Origin'] = origin
+	response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE'
+	response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+	response.headers['Access-Control-Allow-Credentials'] = 'true'
+	return response
 
 
 @app.route('/login/oauth/authorize', methods=['GET', 'POST'])
@@ -104,6 +114,11 @@ def do_authorization():
     # if not logged in, they need to login first ... THEN get back to the authorize page
     #if '_gh_sess' not in request.cookies:
     if login is None:
+
+        print('-' * 50)
+        print('USER NEEDS TO LOGIN FIRST')
+        print('-' * 50)
+
         # craft the redirect url
         url = '/ui/login'
 
@@ -125,9 +140,14 @@ def do_authorization():
     # now they need to see the authorize page ...
     if request.method == 'GET':
 
+        print('-' * 50)
+        print('GET ... SO REDIRECT TO AUTHORIZTION PAGE')
+        print('-' * 50)
+
         # Need to associate this integration to an oauth-app so we can get ...
         client_id = request.args.get('client_id')
         oauth_app = get_oauth_app_by_client_id(client_id)
+        print(f'FOUND OAUTH APP: {oauth_app}')
 
         kwargs = {
             'username': login,
@@ -174,12 +194,64 @@ def do_authorization():
     return resp
     '''
 
+    print('-' * 50)
+    print(f'POST - DOING AUTHORIZATION NOW {uid} {request.args} {request.data}')
+    print('-' * 50)
+
+    # required query params ...
+    # client_id
+    # redirect_uri
+    # scope
+    # state
+    client_id = request.args.get('client_id')
+    redirect_uri = request.args.get('redirect_uri')
+    scope = request.args.get('scope')
+    state = request.args.get('state')
+
+    rkwargs = dict(request.args)
+    for k, v in copy.deepcopy(rkwargs).items():
+        if '?' in k:
+            newk = k.split('?')[1]
+            rkwargs[newk] = v
+            rkwargs.pop(k)
+
+    '''
+    #print(f'client_id:{client_id} redirect_uri:{redirect_uri} scope:{scope} state:{state}')
+    print(f'{rkwargs}')
+
+    client_id = rkwargs['client_id']
+    oauth_app = get_oauth_app_by_client_id(client_id)
+    print(f'FOUND OAUTH APP: {oauth_app}')
+
+    # raise Exception('WTF')
+    state = rkwargs['state']
+
     url = f'{CLIENT_API_SERVER}/complete/github/'
     token = str(uuid.uuid4())
     set_access_token(token, uid)
-    url += f'?code={token}&state=null'
+    url += f'?code={token}&state={state}'
+
+    print(f'REDIRECT AUTHED APP TO {url}')
     resp = redirect(url, code=302)
+
     return resp
+    '''
+
+    authorization_code = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(32))
+    session['authorization_code'] = authorization_code
+
+	# set the access token 
+    set_access_token(authorization_code, uid)
+
+    #redirect_uri = request.args.get('redirect_uri')
+    #return redirect(f'{redirect_uri}?code={authorization_code}&state={request.args.get("state")}')
+
+    session['username'] = login
+
+    return jsonify({
+        'access_code': authorization_code,
+        'redirect_uri': redirect_uri
+    })
 
 
 @app.route('/login/oauth/access_token', methods=['GET', 'POST'])
@@ -216,6 +288,7 @@ def do_access_token():
     resp.set_cookie('_user_session', sessionid)
     '''
 
+    '''
     # the user must be identified by the _gh_sess cookie
     # which matches the session ID and is tied to a UID in the db
 
@@ -230,6 +303,25 @@ def do_access_token():
     return jsonify({
         'access_token': token
     })
+    '''
+
+    print('-' * 50)
+    print(f'DO TOKEN {request.args} {request.data} {request.json}')
+    print('-' * 50)
+
+    code = request.json.get('code')
+    print(f'CODE: {code}')
+    _at = get_access_token_by_id(code)
+    print(f'ACCESS TOKEN: {_at}')
+    uid = int(_at['uid'])
+
+    # Make a new token
+    token = str(uuid.uuid4())
+    set_access_token(token, uid)
+
+
+    return jsonify({'access_token': token})
+
 
 
 # The github login page will post form data here ...
