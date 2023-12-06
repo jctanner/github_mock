@@ -314,7 +314,21 @@ def check_username_and_password(username, password):
         user = get_user_by_login(username)
     except:
         print(f'{username} not found')
+
+        print('KNOWN USERS ...')
+        users = get_user_list()
+        for _user in users:
+            print(f'\t{_user}')
+
         return False
+
+    print(f'CHECK FOUND {user}')
+
+    if user is None:
+        print('KNOWN USERS ...')
+        users = get_user_list()
+        for _user in users:
+            print(f'\t{_user}')
 
     if user.get('password') != password:
         print(f'{password} bad password')

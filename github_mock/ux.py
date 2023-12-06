@@ -36,6 +36,9 @@ def ui_login():
     if request.method == 'POST':
         # Here, add logic to verify username and password
 
+        print(f'# LOGIN FORM ...')
+        print(request.form)
+
         username = request.form['username']
         password = request.form['password']
 
