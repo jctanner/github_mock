@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:latest
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: github
+      POSTGRES_USER: github
+      POSTGRES_PASSWORD: github
+    ports:
+      - "5432:5432"
+
+  github:
+    build: .
+    volumes:
+      - .:/app
+    ports:
+      - "9000:9000"
+    environment:
+      APP_PORT: 9000
+      SPAWN_DB_CONTAINER: false
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: github
+      POSTGRES_USER: github
+      POSTGRES_PASSWORD: github
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:

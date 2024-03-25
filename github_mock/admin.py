@@ -51,11 +51,16 @@ from .database import get_new_uid
 from .database import get_new_login
 from .database import get_new_password
 
+from .database import GithubDatabaseWrapper
+
 
 
 @app.route('/admin/users/list', methods=['GET'])
 def admin_user_list():
-    conn = sqlite3.connect(DB_NAME)
+
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
     cursor = conn.cursor()
 
     sql = "SELECT id, login, email, password FROM users"
@@ -91,15 +96,16 @@ def admin_add_user():
     password = ds.get('password', get_new_password())
     if password is None:
         password = get_new_password()
-    email = ds.get('email', login + '@github.com')
-    # if email is None or not email:
-    #    email = login + '@github.com'
+    email = ds.get('email', login + '@noreply.github.com')
+    if email is None or not email:
+        email = login + '@noreply.github.com'
 
-    conn = sqlite3.connect(DB_NAME)
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
     cursor = conn.cursor()
 
     print(f'CREATING USER {login} with {password}')
-    sql = "INSERT OR IGNORE INTO users (id, login, email, password) VALUES(?, ?, ?, ?)"
+    sql = "INSERT INTO users (id, login, email, password) VALUES(%s, %s, %s, %s)"
     print(sql)
     cursor.execute(sql, (userid, login, email, password,))
     conn.commit()
@@ -119,15 +125,16 @@ def admin_remove_user():
     if login is None:
         login = get_new_login()
 
-    conn = sqlite3.connect(DB_NAME)
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
     cursor = conn.cursor()
 
     if userid:
-        sql = 'DELETE FROM users WHERE id=?'
+        sql = 'DELETE FROM users WHERE id=%s'
         cursor.execute(sql, (userid,))
         conn.commit()
     if login:
-        sql = 'DELETE FROM users WHERE login=?'
+        sql = 'DELETE FROM users WHERE login=%s'
         cursor.execute(sql, (login,))
         conn.commit()
 
@@ -174,7 +181,10 @@ def admin_modify_user(userid=None, login=None):
         new_password = udata['password']
 
     if delete:
-        conn = sqlite3.connect(DB_NAME)
+
+        gdbw = GithubDatabaseWrapper()
+        conn = gdbw.conn
+
         cursor = conn.cursor()
         cursor.execute('DELETE FROM user WHERE id=?', (udata['id'],))
         conn.commit()
@@ -186,7 +196,10 @@ def admin_modify_user(userid=None, login=None):
         conn.close()
 
     else:
-        conn = sqlite3.connect(DB_NAME)
+
+        gdbw = GithubDatabaseWrapper()
+        conn = gdbw.conn
+
         cursor = conn.cursor()
         cursor.execute(
             'UPDATE users SET login=?, password=? WHERE id=?',

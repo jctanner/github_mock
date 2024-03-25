@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 
-###############################################################################
-#
-#   local github social auth mock
-#
-#       Implements just enough of github.com to supply what is needed for api
-#       tests to do github social auth (no browser).
-#
-###############################################################################
+import atexit
+import copy
+import datetime
+import glob
+import json
+import docker
+import os
+import psycopg
+import time
 
+from logzero import logger
 
 import os
 import uuid
@@ -17,95 +19,268 @@ import string
 import sqlite3
 
 
-from .constants import DB_NAME
-from .constants import UPSTREAM_PROTO
-from .constants import UPSTREAM_HOST
-from .constants import UPSTREAM_PORT
-from .constants import UPSTREAM
-from .constants import API_SERVER
-from .constants import CLIENT_API_SERVER
-from .constants import USERS
-from .constants import OAUTH_APPS
+from github_mock.constants import (
+    DB_NAME,
+    UPSTREAM_PROTO,
+    UPSTREAM_HOST,
+    UPSTREAM_PORT,
+    UPSTREAM,
+    API_SERVER,
+    CLIENT_API_SERVER,
+    USERS,
+    OAUTH_APPS
+)
+
+
+
+USERS_SCHEMA = '''
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY,
+        login TEXT NOT NULL UNIQUE,
+        email TEXT NOT NULL,
+        password TEXT NOT NULL
+    )
+'''
+
+
+SESSIONS_SCHEMA = '''
+    CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT NOT NULL PRIMARY KEY,
+        uid TEXT NOT NULL
+    )
+'''
+
+
+ACCESS_TOKENS_SCHEMA = '''
+    CREATE TABLE IF NOT EXISTS access_tokens (
+        access_token TEXT NOT NULL PRIMARY KEY,
+        uid TEXT NOT NULL
+    )
+'''
+
+CSRF_TOKENS_SCHEMA = '''
+    CREATE TABLE IF NOT EXISTS csrf_tokens (
+        csrf_token TEXT NOT NULL PRIMARY KEY,
+        uid TEXT NOT NULL
+    )
+'''
+
+OAUTH_APPS_SCHEMA = '''
+    CREATE TABLE IF NOT EXISTS oauth_apps (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        uid TEXT NOT NULL,
+        homepage TEXT NOT NULL,
+        callback TEXT NOT NULL,
+        clientid TEXT NOT NULL,
+        secretid TEXT NOT NULL
+    )
+'''
+
+class GithubDatabaseWrapper:
+
+    IMAGE = 'postgres'
+    NAME = 'github_database'
+    USER = 'github'
+    PASS = 'github'
+    DB = 'github'
+    IP = None
+    _conn = None
+    spawn_db_container = True
+
+    def __init__(self):
+
+        self.spawn_db_container = os.environ.get('SPAWN_DB_CONTAINER')
+        if self.spawn_db_container is None:
+            self.spawn_db_container = True
+        elif self.spawn_db_container in ['false', 'False', 'FALSE', '0']:
+            self.spawn_db_container = False
+        elif self.spawn_db_container in ['true', 'True', 'TRUE', '1']:
+            self.spawn_db_container = True
+
+        if self.spawn_db_container:
+            self.get_ip()
+        else:
+            self.IP = os.environ.get('POSTGRES_HOST', 'postgres')
+            self.DB = os.environ.get('POSTGRES_DB', 'github')
+            self.USER = os.environ.get('POSTGRES_USER', 'github')
+            self.PASS = os.environ.get('POSTGRES_PASSWORD', 'github')
+
+            self.wait_for_connection()
+
+    def start_database(self, clean=False):
+
+        if not self.spawn_db_container:
+            return
+
+        client = docker.APIClient()
+
+        for container in client.containers(all=True):
+            name = container['Names'][0].lstrip('/')
+            if name == self.NAME:
+
+                if container['State'] == 'running' and not clean:
+                    self.get_ip()
+                    return
+
+                if container['State'] != 'running' and not clean:
+                    client.start(self.NAME)
+                    self.get_ip()
+                    return
+
+                if container['State'] != 'exited':
+                    logger.info(f'kill {self.NAME}')
+                    client.kill(self.NAME)
+                logger.info(f'remove {self.NAME}')
+                client.remove_container(self.NAME)
+
+        logger.info(f'pull {self.IMAGE}')
+        client.pull(self.IMAGE)
+        logger.info(f'create {self.NAME}')
+        container = client.create_container(
+            self.IMAGE,
+            name=self.NAME,
+            environment={
+                'POSTGRES_DB': self.DB,
+                'POSTGRES_USER': self.USER,
+                'POSTGRES_PASSWORD': self.PASS,
+            }
+        )
+        logger.info(f'start {self.NAME}')
+        client.start(self.NAME)
+
+        # enumerate the ip address ...
+        self.get_ip()
+
+        logger.info('wait for connection ...')
+        while True:
+            try:
+                self.get_connection()
+                break
+            except Exception:
+                pass
+
+    def wait_for_connection(self):
+
+        counter = 0
+        while True:
+            counter += 1
+            if counter >= 20:
+                raise Exception('failed to connect to datbase')
+
+            logger.info(f'{counter}: testing database connection ...')
+            try:
+                self.get_connection()
+                break
+            except Exception:
+                time.sleep(1)
+
+    def get_ip(self):
+
+        if not self.spawn_db_container:
+            return
+
+        client = docker.APIClient()
+        for container in client.containers(all=True):
+            name = container['Names'][0].lstrip('/')
+            if name == self.NAME:
+                self.IP = container['NetworkSettings']['Networks']['bridge']['IPAddress']
+                logger.info(f'container IP {self.IP}')
+                break
+        return self.IP
+
+    def get_connection(self):
+        connstring = f'host={self.IP} dbname={self.DB} user={self.USER} password={self.PASS}'
+        return psycopg.connect(connstring)
+
+    def check_table_and_create(self, tablename):
+        conn = self.get_connection()
+        with conn.cursor() as cur:
+            cur.execute("select * from information_schema.tables where table_name=%s", (tablename,))
+            exists = bool(cur.rowcount)
+            if not exists:
+                if tablename == 'jira_issue_events':
+                    cur.execute(ISSUE_EVENT_SCHEMA)
+            conn.commit()
+
+    def load_database(self):
+        try:
+            conn = self.get_connection()
+
+            # create schema ...
+            with conn.cursor() as cur:
+                cur.execute(USERS_SCHEMA)
+                cur.execute(SESSIONS_SCHEMA)
+                cur.execute(ACCESS_TOKENS_SCHEMA)
+                cur.execute(OAUTH_APPS_SCHEMA)
+                conn.commit()
+        except Exception as e:
+            logger.exception(e)
+
+    @property
+    def conn(self):
+        if self._conn is None:
+            self._conn = self.get_connection()
+            atexit.register(self._conn.close)
+        return self._conn
+
+    # ABSTRACTIONS ...
 
 
 def create_tables():
 
-    if os.path.exists(DB_NAME):
-        os.remove(DB_NAME)
+    logger.info('create wrapper')
+    gdbw = GithubDatabaseWrapper()
+    logger.info('start database')
+    gdbw.start_database(clean=True)
+    logger.info('load database')
+    gdbw.load_database()
 
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            login TEXT NOT NULL UNIQUE,
-            email TEXT NOT NULL,
-            password TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
+    conn = gdbw.conn
 
-    for uname, uinfo in USERS.items():
-        sql = "INSERT OR IGNORE INTO users (id, login, email, password) VALUES(?, ?, ?, ?)"
-        print(sql)
-        cursor.execute(sql, (uinfo['id'], uinfo['login'], uinfo['email'], uinfo['password'],))
-        conn.commit()
+    with conn.cursor() as cur:
+        for uname, uinfo in USERS.items():
+            sql = "INSERT INTO users (id, login, email, password) VALUES(%s, %s, %s, %s)"
+            print(sql)
+            try:
+                cur.execute(sql, (uinfo['id'], uinfo['login'], uinfo['email'], uinfo['password'],))
+                conn.commit()
+            except psycopg.errors.UniqueViolation:
+                conn.rollback()
 
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS sessions (
-            id TEXT NOT NULL PRIMARY KEY,
-            uid TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
+    with conn.cursor() as cur:
+        for oapp in OAUTH_APPS:
+            sql = 'INSERT INTO oauth_apps'
+            sql += ' (name, uid, homepage, callback, clientid, secretid)'
+            sql += ' VALUES(%s, %s, %s, %s, %s, %s)'
+            print(sql)
+            try:
+                cur.execute(
+                    sql,
+                    (
+                        oapp['name'],
+                        oapp['uid'],
+                        oapp['homepage'],
+                        oapp['callback'],
+                        oapp['clientid'],
+                        oapp['secretid'],
+                    )
+                )
+                conn.commit()
+            except psycopg.errors.UniqueViolation:
+                conn.rollback()
 
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS access_tokens (
-            access_token TEXT NOT NULL PRIMARY KEY,
-            uid TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS csrf_tokens (
-            csrf_token TEXT NOT NULL PRIMARY KEY,
-            uid TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS oauth_apps (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            uid TEXT NOT NULL,
-            homepage TEXT NOT NULL,
-            callback TEXT NOT NULL,
-            clientid TEXT NOT NULL,
-            secretid TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
-
-    for oapp in OAUTH_APPS:
-        sql = 'INSERT OR IGNORE INTO oauth_apps'
-        sql += ' (name, uid, homepage, callback, clientid, secretid)'
-        sql += ' VALUES(?, ?, ?, ?, ?, ?)'
-        print(sql)
-        cursor.execute(
-            sql,
-            (oapp['name'], oapp['uid'], oapp['homepage'], oapp['callback'], oapp['clientid'], oapp['secretid'],)
-        )
-        conn.commit()
 
     conn.close()
 
 
 def get_user_by_id(userid):
-    conn = sqlite3.connect(DB_NAME)
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
     cursor = conn.cursor()
-    cursor.execute('SELECT id,login,email,password FROM users WHERE id = ?', (userid,))
+    cursor.execute('SELECT id,login,email,password FROM users WHERE id = %s', (userid,))
     row = cursor.fetchone()
     userid = row[0]
     login = row[1]
@@ -116,10 +291,13 @@ def get_user_by_id(userid):
 
 
 def get_user_by_login(login):
-    conn = sqlite3.connect(DB_NAME)
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
     cursor = conn.cursor()
     print(f'FINDING USER BY LOGIN:{login}')
-    cursor.execute('SELECT id,login,email,password FROM users WHERE login = ?', (login,))
+    cursor.execute('SELECT id,login,email,password FROM users WHERE login = %s', (login,))
     row = cursor.fetchone()
     if row is None:
         return None
@@ -132,9 +310,12 @@ def get_user_by_login(login):
 
 
 def get_session_by_id(sid):
-    conn = sqlite3.connect(DB_NAME)
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
     cursor = conn.cursor()
-    cursor.execute('SELECT id,uid FROM sessions WHERE id = ?', (sid,))
+    cursor.execute('SELECT id,uid FROM sessions WHERE id = %s', (sid,))
     row = cursor.fetchone()
     rsid = row[0]
     userid = row[1]
@@ -143,10 +324,13 @@ def get_session_by_id(sid):
 
 
 def set_session(sid, uid):
-    conn = sqlite3.connect(DB_NAME)
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
     cursor = conn.cursor()
     cursor.execute(
-        'INSERT into sessions (id, uid) VALUES (?, ?)',
+        'INSERT into sessions (id, uid) VALUES (%s, %s)',
         (sid, uid)
     )
     conn.commit()
@@ -161,9 +345,12 @@ def make_session(username):
 
 
 def get_access_token_by_id(sid):
-    conn = sqlite3.connect(DB_NAME)
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
     cursor = conn.cursor()
-    cursor.execute('SELECT access_token,uid FROM access_tokens WHERE access_token = ?', (sid,))
+    cursor.execute('SELECT access_token,uid FROM access_tokens WHERE access_token = %s', (sid,))
     row = cursor.fetchone()
     rsid = row[0]
     userid = row[1]
@@ -172,10 +359,13 @@ def get_access_token_by_id(sid):
 
 
 def set_access_token(token, uid):
-    conn = sqlite3.connect(DB_NAME)
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
     cursor = conn.cursor()
     cursor.execute(
-        'INSERT into access_tokens (access_token, uid) VALUES (?, ?)',
+        'INSERT into access_tokens (access_token, uid) VALUES (%s, %s)',
         (token, uid)
     )
     conn.commit()
@@ -183,10 +373,13 @@ def set_access_token(token, uid):
 
 
 def delete_access_token(token):
-    conn = sqlite3.connect(DB_NAME)
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
     cursor = conn.cursor()
     cursor.execute(
-        'DELETE FROM access_tokens WHERE access_token=?',
+        'DELETE FROM access_tokens WHERE access_token=%s',
         (token,)
     )
     conn.commit()
@@ -194,9 +387,12 @@ def delete_access_token(token):
 
 
 def get_csrf_token_by_id(sid):
-    conn = sqlite3.connect(DB_NAME)
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
     cursor = conn.cursor()
-    cursor.execute('SELECT csrf_token,uid FROM access_tokens WHERE csrf_token = ?', (sid,))
+    cursor.execute('SELECT csrf_token,uid FROM access_tokens WHERE csrf_token = %s', (sid,))
     row = cursor.fetchone()
     rsid = row[0]
     userid = row[1]
@@ -205,10 +401,13 @@ def get_csrf_token_by_id(sid):
 
 
 def set_csrf_token(token, uid):
-    conn = sqlite3.connect(DB_NAME)
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
     cursor = conn.cursor()
     cursor.execute(
-        'INSERT into csrf_tokens (id, uid) VALUES (?, ?)',
+        'INSERT into csrf_tokens (id, uid) VALUES (%s, %s)',
         (token, uid)
     )
     conn.commit()
@@ -216,7 +415,10 @@ def set_csrf_token(token, uid):
 
 
 def get_new_uid():
-    conn = sqlite3.connect(DB_NAME)
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
     cursor = conn.cursor()
     cursor.execute('SELECT MAX(id) FROM users')
     highest_id = cursor.fetchone()[0]
@@ -233,9 +435,11 @@ def get_new_password():
 
 
 def get_user_list():
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
 
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
+    cursor = conn.cursor()
     sql = "SELECT id, login, email, password FROM users"
     cursor.execute(sql)
     rows = cursor.fetchall()
@@ -255,7 +459,10 @@ def get_user_list():
 
 
 def get_oauth_app_list():
-    conn = sqlite3.connect(DB_NAME)
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
     cursor = conn.cursor()
 
     '''
@@ -363,22 +570,28 @@ def alter_user_data(src_data, new_data):
         new_password = udata['password']
 
     if delete:
-        conn = sqlite3.connect(DB_NAME)
+
+        gdbw = GithubDatabaseWrapper()
+        conn = gdbw.conn
+
         cursor = conn.cursor()
-        cursor.execute('DELETE FROM users WHERE id=?', (src_data['id'],))
+        cursor.execute('DELETE FROM users WHERE id=%s', (src_data['id'],))
         conn.commit()
         cursor.execute(
-            'INSERT INTO users (id, login, email, password) VALUES (?,?,?,?)',
+            'INSERT INTO users (id, login, email, password) VALUES (%s,%s,%s,%s)',
             (new_userid, new_login, new_email, new_password,)
         )
         conn.commit()
         conn.close()
 
     else:
-        conn = sqlite3.connect(DB_NAME)
+
+        gdbw = GithubDatabaseWrapper()
+        conn = gdbw.conn
+
         cursor = conn.cursor()
         cursor.execute(
-            'UPDATE users SET login=?, email=?, password=? WHERE id=?',
+            'UPDATE users SET login=%s, email=%s, password=%s WHERE id=%s',
             (new_login, new_email, new_password, src_data['id'],)
         )
         conn.commit()
@@ -388,15 +601,19 @@ def alter_user_data(src_data, new_data):
 
 
 def delete_user(id=None, login=None):
+
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+
     cursor = conn.cursor()
 
     if id:
-        sql = 'DELETE FROM users WHERE id=?'
+        sql = 'DELETE FROM users WHERE id=%s'
         cursor.execute(sql, (id,))
         conn.commit()
 
     if login:
-        sql = 'DELETE FROM users WHERE login=?'
+        sql = 'DELETE FROM users WHERE login=%s'
         cursor.execute(sql, (login,))
         conn.commit()
 
@@ -417,11 +634,12 @@ def add_user(ds):
         password = get_new_password()
     email = ds.get('email', login + '@github.com')
 
-    conn = sqlite3.connect(DB_NAME)
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
     cursor = conn.cursor()
 
     print(f'CREATING USER {login} with {password}')
-    sql = "INSERT OR IGNORE INTO users (id, login, email, password) VALUES(?, ?, ?, ?)"
+    sql = "INSERT INTO users (id, login, email, password) VALUES(%s, %s, %s, %s)"
     print(sql)
     cursor.execute(sql, (userid, login, email, password,))
     conn.commit()
@@ -443,14 +661,15 @@ def create_oauth_app(
     udata = get_user_by_login(login)
     userid = udata['id']
 
-    conn = sqlite3.connect(DB_NAME)
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
     cursor = conn.cursor()
 
     sql = """
-        INSERT OR IGNORE INTO oauth_apps (
+        INSERT INTO oauth_apps (
             uid, name, homepage, callback, clientid, secretid
         ) VALUES(
-            ?, ?, ?, ?, ?, ?
+            %s, %s, %s, %s, %s, %s
         )
     """
     print(sql)
@@ -458,3 +677,21 @@ def create_oauth_app(
 
     conn.commit()
     conn.close()
+
+
+def main():
+
+    '''
+    logger.info('create wrapper')
+    gdbw = GithubDatabaseWrapper()
+    logger.info('start database')
+    gdbw.start_database(clean=True)
+    logger.info('load database')
+    gdbw.load_database()
+    '''
+    create_tables()
+
+
+if __name__ == "__main__":
+    main()
+
