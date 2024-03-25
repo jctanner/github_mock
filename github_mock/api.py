@@ -54,64 +54,27 @@ from .database import get_new_password
 
 @app.route('/user', methods=['GET', 'POST'])
 def github_user():
-
-    # THIS SHOULD RETURN DATA ABOUT THE CURRENTLY LOGGED IN USER !?!? ...
-
-    print('#' * 50)
-    print('GITHUB USER ...')
-    print('#' * 50)
-    print(request.headers)
-
-    '''
-    auth = request.headers['Authorization']
-    print(auth)
-    token = auth.split()[-1].strip()
-    # username = ACCESS_TOKENS[token]
-    token_data = get_access_token_by_id(token)
-    _udata = get_user_by_id(token_data['uid'])
-    username = _udata['login']
-    print(username)
-    # ACCESS_TOKENS.pop(token, None)
-    delete_access_token(token)
-    # udata = copy.deepcopy(USERS[username])
-    udata = get_user_by_login(username)
-    udata.pop('password', None)
-    print(udata)
-    return jsonify(udata)
-    '''
-
-    '''
-    # We need to know if this is a logged in user ... so do they have a _gh_sess and is it valid?
-    login = None
-    uid = None
-    _gh_sess = request.cookies.get('_gh_sess')
-    session_data = None
-    if _gh_sess:
-        try:
-            session_data = get_session_by_id(_gh_sess)
-            uid = session_data['uid']
-            udata = get_user_by_id(uid)
-            login = udata['login']
-        except Exception as e:
-            pass
-
-    print(f'FOUND LOGIN: {login}')
-    '''
-
+ 
     # The token in the headers should allow correlation with the user this returns data about ...
     auth = request.headers['Authorization']
     print(auth)
     token = auth.split()[-1].strip()
     print(f'TOKEN: {token}')
 
+    # fetch the token to get the uid associated
     token_data = get_access_token_by_id(token)
+
+    # get the user via the uid
     _udata = get_user_by_id(token_data['uid'])
     username = _udata['login']
     print(username)
-    # ACCESS_TOKENS.pop(token, None)
+
+    # make it a one time token?
     delete_access_token(token)
-    # udata = copy.deepcopy(USERS[username])
+
+    # fetch the full info about the user and drop the password
     udata = get_user_by_login(username)
     udata.pop('password', None)
     print(udata)
+
     return jsonify(udata)
