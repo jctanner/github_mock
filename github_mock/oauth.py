@@ -262,8 +262,20 @@ def do_authorization():
 @app.route('/login/oauth/access_token', methods=['GET', 'POST'])
 def do_access_token():
 
+    '''
+    print('#' * 50)
+    print('DO ACCESS TOKEN ...')
+    print('#' * 50)
+    print(request)
+    print(request.args)
+    print(request.data)
+    '''
+
+
+    '''
     ds = request.json
     print(f'AT ds: {ds}')
+    '''
 
     '''
     access_code = ds['code']
@@ -310,21 +322,81 @@ def do_access_token():
     })
     '''
 
-    print('-' * 50)
-    print(f'DO TOKEN {request.args} {request.data} {request.json}')
-    print('-' * 50)
+    def get_args():
+        #nonlocal request
+        try:
+            return request.args
+        except:
+            return None
 
+    def get_data():
+        #nonlocal request
+        try:
+            return request.data
+        except:
+            return None
+
+    def get_json():
+        #nonlocal request
+        try:
+            return request.json
+        except:
+            return None
+
+    def get_form():
+        #nonlocal request
+        try:
+            return request.form
+        except:
+            return None
+
+    print('-' * 100)
+    print(f'DO TOKEN args:{get_args()} data:{get_data()} json:{get_json()} form:{get_form()}')
+    print('-' * 100)
+
+    '''
     code = request.json.get('code')
     print(f'CODE: {code}')
     _at = get_access_token_by_id(code)
     print(f'ACCESS TOKEN: {_at}')
     uid = int(_at['uid'])
+    '''
 
-    # Make a new token
+    client_id = request.form.get('client_id')
+    client_secret = request.form.get('client_secret')
+    code = request.form.get('code')
+    grant_type = request.form.get('grant_type')
+    redirect_uri = request.form.get('redirect_uri')
+
+    '''
+    login = None
+    uid = None
+    _gh_sess = request.cookies.get('_gh_sess')
+    session_data = None
+    if _gh_sess:
+        try:
+            session_data = get_session_by_id(_gh_sess)
+            uid = session_data['uid']
+            udata = get_user_by_id(uid)
+            login = udata['login']
+        except Exception as e:
+            pass
+    '''
+
+    # set_access_token(authorization_code, uid)
+    _at = get_access_token_by_id(code)
+    print(f'AT: {_at}')
+    uid = _at['uid']
+    user = get_user_by_id(uid)
+    print(f'USER: {user}')
+    login = user['login']
+    print(f'LOGIN: {login}')
+
+    # Make a new token FOR WHAT USER ... !?
     token = str(uuid.uuid4())
     set_access_token(token, uid)
 
-
+    # raise Exception('fuck')
     return jsonify({'access_token': token})
 
 
