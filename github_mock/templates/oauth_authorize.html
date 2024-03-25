@@ -91,9 +91,9 @@ function doAuthorization() {
             console.log('data', response.data);
             const access_code = response.data.access_code;
             const redirect_uri = response.data.redirect_uri;
-            console.log('redirect_uri', redirect_uri);
+            const state = response.data.state;
 
-            const finalRedirect = redirect_uri + '?code=' + access_code;
+            const finalRedirect = redirect_uri + '?code=' + access_code + '&state=' + state;
 
             //window.location.href = '{{ redirect_url }}';
             window.location.href = finalRedirect;

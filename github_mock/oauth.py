@@ -19,6 +19,8 @@ import sqlite3
 from urllib.parse import urlencode
 # import requests
 
+from pprint import pprint
+
 from flask import Flask
 from flask import jsonify
 from flask import request
@@ -215,6 +217,8 @@ def do_authorization():
             rkwargs[newk] = v
             rkwargs.pop(k)
 
+    pprint(rkwargs)
+
     '''
     #print(f'client_id:{client_id} redirect_uri:{redirect_uri} scope:{scope} state:{state}')
     print(f'{rkwargs}')
@@ -250,6 +254,7 @@ def do_authorization():
 
     return jsonify({
         'access_code': authorization_code,
+        'state': state,
         'redirect_uri': redirect_uri
     })
 
