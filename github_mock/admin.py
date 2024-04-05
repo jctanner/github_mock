@@ -50,6 +50,7 @@ from .database import set_csrf_token
 from .database import get_new_uid
 from .database import get_new_login
 from .database import get_new_password
+from .database import delete_oauth_app
 
 from .database import GithubDatabaseWrapper
 
@@ -210,3 +211,18 @@ def admin_modify_user(userid=None, login=None):
 
     udata = get_user_by_login(new_login)
     return jsonify(udata)
+
+
+@app.route('/admin/oauth_apps/<appid>', methods=['DELETE'])
+def admin_delete_ouath_app(appid=None):
+    success = False
+    error = None
+    try:
+        delete_oauth_app(appid)
+        success = True
+    except Exception as e:
+        error = str(e)
+        print(f'ERROR {e}')
+
+    return jsonify({'success': success, 'error': error})
+

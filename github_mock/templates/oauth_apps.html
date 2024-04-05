@@ -34,6 +34,8 @@
             <td>{{ oapp.clientid }}</td>
             <td>{{ oapp.secretid }}</td>
             <td>
+                <button type="button" class="btn btn-primary btn-sm" onclick="editOauthApp({{ oapp.id }})">edit</button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="deleteOauthApp({{ oapp.id }})">delete</button>
             </td>
         </tr>
         {% endfor %}
@@ -107,6 +109,33 @@ function generateRandomClientId(length = 20) {
     return clientId;
 }
 
+function deleteOauthApp(appId) {
+    console.log('delete app', appId);
+
+    // URL of the endpoint
+    const url = `/admin/oauth_apps/${appId}`;
+
+    // Use fetch to make the DELETE request
+    fetch(url, {
+        method: 'DELETE', // Specify the method to be DELETE
+    })
+    .then(response => {
+        if (response.ok) {
+            //return response.json(); // or .text() if the response is text
+            location.reload();
+        }
+        throw new Error('Network response was not ok.');
+    })
+    .then(data => {
+        console.log('Delete successful:', data);
+    })
+    .catch(error => {
+        console.error('There was a problem with your fetch operation:', error);
+    });
+
+    //location.reload();
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     $('#addOauthAppModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget); // Button that triggered the modal
@@ -144,9 +173,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     });
 });
-</script>
 
-<script>
 document.addEventListener('DOMContentLoaded', function () {
     var addUserForm = document.getElementById('addOauthAppForm');
 
@@ -167,6 +194,7 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log(response);
             // Handle success, e.g., close modal, refresh user list
             $('#addOauthAppModal').modal('hide');
+            location.reload();
         })
         .catch(function (error) {
             console.error(error);

@@ -68,7 +68,7 @@ CSRF_TOKENS_SCHEMA = '''
 OAUTH_APPS_SCHEMA = '''
     CREATE TABLE IF NOT EXISTS oauth_apps (
         id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
+        name TEXT NOT NULL UNIQUE,
         uid TEXT NOT NULL,
         homepage TEXT NOT NULL,
         callback TEXT NOT NULL,
@@ -209,9 +209,13 @@ class GithubDatabaseWrapper:
 
             # create schema ...
             with conn.cursor() as cur:
+                print('CALL USERS_SCHEMA')
                 cur.execute(USERS_SCHEMA)
+                print('CALL SESSIONS_SCHEMA')
                 cur.execute(SESSIONS_SCHEMA)
+                print('CALL ACCESS_TOKENS_SCHEMA')
                 cur.execute(ACCESS_TOKENS_SCHEMA)
+                print('CALL OAUTH_APPS_SCHEMA')
                 cur.execute(OAUTH_APPS_SCHEMA)
                 conn.commit()
         except Exception as e:
@@ -674,6 +678,21 @@ def create_oauth_app(
     """
     print(sql)
     cursor.execute(sql, (userid, name, homepage, callback, clientid, secretid,))
+
+    conn.commit()
+    conn.close()
+
+
+def delete_oauth_app(appid=None):
+    gdbw = GithubDatabaseWrapper()
+    conn = gdbw.conn
+    cursor = conn.cursor()
+
+    sql = """
+        DELETE FROM oauth_apps WHERE id=%s
+    """
+    print(sql)
+    cursor.execute(sql, (appid,))
 
     conn.commit()
     conn.close()

@@ -54,7 +54,7 @@ from .database import get_new_password
 
 @app.route('/user', methods=['GET', 'POST'])
 def github_user():
- 
+
     # The token in the headers should allow correlation with the user this returns data about ...
     auth = request.headers['Authorization']
     print(auth)
