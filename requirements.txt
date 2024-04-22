@@ -1,5 +1,7 @@
 flask
 requests
+requests_cache
 docker
 psycopg
 logzero
+PyGithub

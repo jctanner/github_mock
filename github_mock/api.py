@@ -10,14 +10,18 @@
 ###############################################################################
 
 
+import json
+import glob
 import os
 import uuid
 import random
 import string
 import sqlite3
+from itertools import islice
 # import requests
 
 from flask import Flask
+from flask import Response
 from flask import jsonify
 from flask import request
 from flask import redirect
@@ -52,6 +56,41 @@ from .database import get_new_login
 from .database import get_new_password
 
 
+from .data_indexer import DataIndexer
+
+
+DI = DataIndexer()
+
+
+def chunk_list(lst, chunk_size):
+    """Yield successive chunks of chunk_size from lst using itertools.islice."""
+    it = iter(lst)
+    while True:
+        chunk = list(islice(it, chunk_size))
+        if not chunk:
+            break
+        yield chunk
+
+def fix_urls(data):
+
+    print(f'fixing urls ...')
+
+    # https://api.github.com -> http://localhost:9000
+    # git@github.com: -> git@localhost:9000:
+
+    scheme = request.scheme
+    host = request.host
+    newurl = scheme + '://' + host
+
+    dtext = json.dumps(data)
+
+    dtext = dtext.replace('https://api.github.com', newurl)
+    dtext = dtext.replace('https://github.com', newurl)
+    dtext = dtext.replace('git@github.com:', 'git@' + host + ':')
+
+    return json.loads(dtext)
+
+
 @app.route('/user', methods=['GET', 'POST'])
 def github_user():
 
@@ -78,3 +117,134 @@ def github_user():
     print(udata)
 
     return jsonify(udata)
+
+
+@app.route('/repositories')
+def api_repositories():
+
+    fns = DI.get_repos()
+    print(fns)
+
+    repos = []
+    for fn in fns:
+        dfile = os.path.join(fn, 'data.json')
+        with open(dfile, 'r') as f:
+            rdata = json.loads(f.read())
+        rdata = fix_urls(rdata)
+        repos.append(rdata)
+
+    repos = sorted(repos, key=lambda x: x['id'])
+
+    return jsonify(repos)
+
+
+# https://api.github.com/repos/geerlingguy/ansible-role-docker
+@app.route('/repos/<orgname>/<reponame>')
+def api_repo_by_path(orgname=None, reponame=None):
+
+    fn = DI.get_repo_by_full_name(orgname + '/' + reponame)
+    with open(fn, 'r') as f:
+        data = json.loads(f.read())
+
+    data = fix_urls(data)
+
+    return jsonify(data)
+
+
+# https://api.github.com/repositories/634043200/issues
+@app.route('/repositories/<repoid>/issues')
+def api_repositories_issues(repoid=None):
+    return jsonify([])
+
+
+@app.route('/repos/<orgname>/<reponame>/issues')
+def api_repo_issues(orgname=None, reponame=None):
+
+    repo_fn = DI.get_repo_by_full_name(orgname + '/' + reponame)
+    repo_dn = os.path.dirname(repo_fn)
+    issue_files = glob.glob(f'{repo_dn}/issues/*.json')
+
+    issues = []
+    for issue_file in issue_files:
+        with open(issue_file, 'r') as f:
+            idata = json.loads(f.read())
+        issues.append(idata)
+
+    state = None
+    if request.args.get('state') is None:
+        issues = [x for x in issues if x['state'] == 'open']
+    elif request.args.get('state') == 'closed':
+        issues = [x for x in issues if x['state'] == 'closed']
+        state = 'closed'
+    else:
+        state = 'all'
+
+    # sort: Can be one of: created, updated, comments
+    if request.args.get('sort') == 'created':
+        sort_key = 'crated_at'
+    elif request.args.get('sort') == 'created':
+        sort_key = 'updated_at'
+    else:
+        sort_key = 'created_at'
+
+    if request.args.get('direction') == 'asc':
+        reverse = True
+    else:
+        reverse = False
+    issues = sorted(issues, key=lambda x: x[sort_key], reverse=reverse)
+
+	# pagination ...
+    per_page = 30
+    if request.args.get('per_page'):
+        try:
+            _per_page = int(request.args.get('per_page'))
+            if _per_page <= 100:
+                per_page = _per_page
+        except Exception:
+            pass
+    page = 0
+    if request.args.get('page'):
+        page = int(request.args.get('page'))
+    slices = list(chunk_list(issues, per_page))
+    total_count = len(issues)
+    total_pages = len(slices)
+
+    # Generate links for pagination
+    links = []
+    base_url = request.base_url
+    common_params = f""
+    if request.args.get('sort'):
+        common_params += f"&sort={request.args.get('sort')}"
+    if request.args.get('direction'):
+        common_params += f"&direction={request.args.get('direction')}"
+    if state:
+        common_params += f"&state={state}"
+    if page < total_pages:
+        #next_url = f"{base_url}?page={page+1}&per_page={per_page}"
+        next_url = f"{base_url}?page={page + 1}&per_page={per_page}{common_params}"
+        links.append(f'<{next_url}>; rel="next"')
+    if page > 1:
+        #prev_url = f"{base_url}?page={page-1}&per_page={per_page}"
+        prev_url = f"{base_url}?page={page - 1}&per_page={per_page}{common_params}"
+        links.append(f'<{prev_url}>; rel="prev"')
+
+    issues = slices[page-1]
+    #return jsonify(issues)
+
+    # Response with JSON data and headers
+    response = Response(
+        response=json.dumps(issues),
+        status=200,
+        mimetype='application/json'
+    )
+    if links:
+        response.headers['Link'] = ', '.join(links)
+    response.headers['X-Total-Count'] = total_count
+
+    return response
+
+
+# https://api.github.com/repos/modularml/mojo/issues/1
+@app.route('/repos/<orgname>/<reponame>/issues/<number>')
+def api_repo_issue(orgname=None, reponame=None, number=None):
+    return jsonify({})
