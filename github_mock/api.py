@@ -62,6 +62,18 @@ from .data_indexer import DataIndexer
 DI = DataIndexer()
 
 
+def label_name_to_struct(label_name):
+    return {
+        'color': 'ffffff',
+        'default': False,
+        'description': None,
+        'id': 99999999,
+        'name': label_name,
+        'node_id': 'XXXXXXXXXXXXXX',
+        'url': None,
+    }
+
+
 def chunk_list(lst, chunk_size):
     """Yield successive chunks of chunk_size from lst using itertools.islice."""
     it = iter(lst)
@@ -71,9 +83,10 @@ def chunk_list(lst, chunk_size):
             break
         yield chunk
 
+
 def fix_urls(data):
 
-    print(f'fixing urls ...')
+    #print(f'fixing urls ...')
 
     # https://api.github.com -> http://localhost:9000
     # git@github.com: -> git@localhost:9000:
@@ -229,7 +242,7 @@ def api_repo_issues(orgname=None, reponame=None):
         links.append(f'<{prev_url}>; rel="prev"')
 
     issues = slices[page-1]
-    #return jsonify(issues)
+    issues = [fix_urls(x) for x in issues]
 
     # Response with JSON data and headers
     response = Response(
@@ -247,4 +260,64 @@ def api_repo_issues(orgname=None, reponame=None):
 # https://api.github.com/repos/modularml/mojo/issues/1
 @app.route('/repos/<orgname>/<reponame>/issues/<number>')
 def api_repo_issue(orgname=None, reponame=None, number=None):
+    ifile = DI.get_issue_by_full_name_and_number(orgname + '/' + reponame, number)
+    with open(ifile, 'r') as f:
+        idata = json.loads(f.read())
+    idata = fix_urls(idata)
+    return jsonify(idata)
+
+
+@app.route('/repos/<orgname>/<reponame>/issues/<number>/labels', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def api_repo_issue_labels(orgname=None, reponame=None, number=None):
+    ifile = DI.get_issue_by_full_name_and_number(orgname + '/' + reponame, number)
+    with open(ifile, 'r') as f:
+        idata = json.loads(f.read())
+
+    lmap = dict((x['name'], x) for x in idata['labels'])
+
+    # POST == append
+    # https://docs.github.com/en/rest/issues/labels?apiVersion=2022-11-28#add-labels-to-an-issue
+    if request.method == 'POST':
+        print(f'POST {request.data} {request.json}')
+        for x in request.json:
+            if x not in lmap:
+                newlabel = label_name_to_struct(x)
+                idata['labels'].append(newlabel)
+        with open(ifile, 'w') as f:
+            f.write(json.dumps(idata, indent=2, sort_keys=True))
+
+    # PUT == replace
+    # https://docs.github.com/en/rest/issues/labels?apiVersion=2022-11-28#set-labels-for-an-issue
+    elif request.method == 'PUT':
+        print(f'PUT {request.data} {request.json}')
+        newlabels = []
+        for x in request.json:
+            if x in lmap:
+                newlabels.append(lmap[x])
+            else:
+                newlabels.append(label_name_to_struct(x))
+        idata['labels'] = newlabels
+        with open(ifile, 'w') as f:
+            f.write(json.dumps(idata, indent=2, sort_keys=True))
+
+    # DELETE == clear
+    elif request.method == 'DELETE':
+        print(f'DELETE')
+        idata['labels'] = []
+        with open(ifile, 'w') as f:
+            f.write(json.dumps(idata, indent=2, sort_keys=True))
+
+    return jsonify(idata['labels'])
+
+
+@app.route('/repos/<orgname>/<reponame>/issues/<number>/labels/<label>', methods=['DELETE'])
+def api_repo_issue_label_delete(orgname=None, reponame=None, number=None, label=None):
+    ifile = DI.get_issue_by_full_name_and_number(orgname + '/' + reponame, number)
+    with open(ifile, 'r') as f:
+        idata = json.loads(f.read())
+
+    idata['labels'] = [x for x in idata['labels'] if x['name'] != label]
+    with open(ifile, 'w') as f:
+        f.write(json.dumps(idata, indent=2, sort_keys=True))
+
     return jsonify({})

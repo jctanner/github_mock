@@ -161,7 +161,7 @@ def main():
     for repo_fullname in repos:
         print(repo_fullname)
         repo = gc.get_repository(repo_fullname)
-        import epdb; epdb.st()
+        #import epdb; epdb.st()
 
         # where to put all the stuff for this repo ...
         repo_dir = os.path.join(args.dest, 'repositories', str(repo.id))
@@ -181,7 +181,7 @@ def main():
         for issue in repo.get_issues(state='all', sort='created_at'):
             print(issue)
             rd = issue.raw_data
-            ifile = os.path.join(idir, str(issue.id) + '.json')
+            ifile = os.path.join(idir, str(issue.id) + '.' + str(issue.number) + '.json')
             with open(ifile, 'w') as f:
                 f.write(json.dumps(rd, indent=2, sort_keys=True))
             #import epdb; epdb.st()
