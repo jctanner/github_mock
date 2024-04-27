@@ -279,10 +279,17 @@ def api_repo_issue_labels(orgname=None, reponame=None, number=None):
     # https://docs.github.com/en/rest/issues/labels?apiVersion=2022-11-28#add-labels-to-an-issue
     if request.method == 'POST':
         print(f'POST {request.data} {request.json}')
-        for x in request.json:
+        ds = request.json
+        if isinstance(ds, list):
+            new_labels = ds
+        else:
+            new_labels = ds.get('labels')
+
+        for x in new_labels:
             if x not in lmap:
                 newlabel = label_name_to_struct(x)
                 idata['labels'].append(newlabel)
+
         with open(ifile, 'w') as f:
             f.write(json.dumps(idata, indent=2, sort_keys=True))
 
