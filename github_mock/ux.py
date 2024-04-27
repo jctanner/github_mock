@@ -1,3 +1,6 @@
+import os
+import json
+
 from flask import (
     Flask,
     flash,
@@ -19,6 +22,12 @@ from .database import delete_user
 from .database import get_oauth_app_list
 from .database import add_user
 from .database import create_oauth_app
+
+from .data_indexer import DataIndexer
+from .utils import fix_urls
+
+
+DI = DataIndexer()
 
 
 @app.route('/')
@@ -145,7 +154,21 @@ def ui_user_edit(id=None):
 
 @app.route('/ui/repositories')
 def ui_repositories():
-    return render_template('repositories.html')
+
+    fns = DI.get_repos()
+    print(fns)
+
+    repos = []
+    for fn in fns:
+        dfile = os.path.join(fn, 'data.json')
+        with open(dfile, 'r') as f:
+            rdata = json.loads(f.read())
+        rdata = fix_urls(rdata, request=request)
+        repos.append(rdata)
+
+    repos = sorted(repos, key=lambda x: x['id'])
+
+    return render_template('repositories.html', repositories=repos)
 
 
 @app.route('/ui/oauth-apps', methods=['GET', 'POST'])
