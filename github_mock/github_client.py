@@ -138,6 +138,10 @@ class GithubClient():
             if x.full_name == path:
                 return x
 
+    def get_repository_labels(self, path):
+        repo = self.g.get_repo(path)
+        for label in repo.get_labels():
+            yield label
 
 
 def main():
@@ -171,6 +175,12 @@ def main():
         # write out the repo's information ...
         with open(os.path.join(repo_dir, 'data.json'), 'w') as f:
             f.write(json.dumps(repo.raw_data, indent=2, sort_keys=True))
+
+        # get the repo's labels ...
+        labels = list(gc.get_repository_labels(repo_fullname))
+        labels = [x.raw_data for x in labels]
+        with open(os.path.join(repo_dir, 'labels.json'), 'w') as f:
+            f.write(json.dumps(labels, indent=2, sort_keys=True))
 
         # make a path for the issues
         idir = os.path.join(repo_dir, 'issues')
