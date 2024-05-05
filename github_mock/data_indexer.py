@@ -37,6 +37,9 @@ class DataIndexer:
     def get_repo_by_full_name(self, full_name):
         return os.path.join(self.CACHE['repositories']['by_fullname'][full_name], 'data.json')
 
+    def get_repo_labels(self, full_name):
+        return os.path.join(self.CACHE['repositories']['by_fullname'][full_name], 'labels.json')
+
     def get_issue_by_full_name_and_number(self, full_name, number):
         repodir = self.CACHE['repositories']['by_fullname'][full_name]
         ifiles = glob.glob(f'{repodir}/issues/*.{number}.json')

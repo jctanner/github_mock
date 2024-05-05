@@ -272,8 +272,13 @@ def api_repo_issue_labels(orgname=None, reponame=None, number=None):
     ifile = DI.get_issue_by_full_name_and_number(orgname + '/' + reponame, number)
     with open(ifile, 'r') as f:
         idata = json.loads(f.read())
-
     lmap = dict((x['name'], x) for x in idata['labels'])
+
+    # map out all of the repo's labels ...
+    lfile = DI.get_repo_labels(orgname + '/' + reponame)
+    with open(lfile, 'r') as f:
+        ldata = json.loads(f.read())
+    rlmap = dict((x['name'], x) for x in ldata)
 
     # POST == append
     # https://docs.github.com/en/rest/issues/labels?apiVersion=2022-11-28#add-labels-to-an-issue
@@ -287,7 +292,8 @@ def api_repo_issue_labels(orgname=None, reponame=None, number=None):
 
         for x in new_labels:
             if x not in lmap:
-                newlabel = label_name_to_struct(x)
+                #newlabel = label_name_to_struct(x)
+                newlabel = rlmap.get(x)
                 idata['labels'].append(newlabel)
 
         with open(ifile, 'w') as f:
@@ -300,9 +306,9 @@ def api_repo_issue_labels(orgname=None, reponame=None, number=None):
         newlabels = []
         for x in request.json:
             if x in lmap:
-                newlabels.append(lmap[x])
+                newlabels.append(rlmap.get(x))
             else:
-                newlabels.append(label_name_to_struct(x))
+                newlabels.append(rlmap.get(x))
         idata['labels'] = newlabels
         with open(ifile, 'w') as f:
             f.write(json.dumps(idata, indent=2, sort_keys=True))
