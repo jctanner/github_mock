@@ -165,14 +165,16 @@ class GithubDatabaseWrapper:
         counter = 0
         while True:
             counter += 1
-            if counter >= 20:
-                raise Exception('failed to connect to datbase')
+            #if counter >= 20:
+            #    raise Exception('failed to connect to database')
 
-            logger.info(f'{counter}: testing database connection ...')
+            logger.info(f'{counter}: spawn:{self.spawn_db_container} testing database connection ...')
             try:
                 self.get_connection()
                 break
-            except Exception:
+            except Exception as e:
+                if counter >= 20:
+                    raise Exception(f'failed to connect to database {e}')
                 time.sleep(1)
 
     def get_ip(self):
