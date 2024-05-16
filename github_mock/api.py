@@ -20,6 +20,8 @@ import sqlite3
 from itertools import islice
 # import requests
 
+from pprint import pprint
+
 from flask import Flask
 from flask import Response
 from flask import jsonify
@@ -291,9 +293,15 @@ def api_repo_issue_labels(orgname=None, reponame=None, number=None):
             new_labels = ds.get('labels')
 
         for x in new_labels:
+            if x is None:
+                raise Exception(f'label was None')
             if x not in lmap:
                 #newlabel = label_name_to_struct(x)
                 newlabel = rlmap.get(x)
+                if newlabel is None:
+                    print(f'{x} was not found in repo label map')
+                    newlabel = label_name_to_struct(x)
+                pprint(newlabel)
                 idata['labels'].append(newlabel)
 
         with open(ifile, 'w') as f:
