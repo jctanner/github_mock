@@ -7,6 +7,7 @@ from pprint import pprint
 
 class DataIndexer:
     def __init__(self):
+        print('dataindexer init')
         self.datadir = '/data'
         self.CACHE = {
             'repositories': {
